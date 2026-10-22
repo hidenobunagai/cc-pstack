@@ -1,0 +1,12 @@
+{
+  "name": "cc-pstack-local",
+  "owner": { "name": "hidenobunagai", "url": "https://github.com/hidenobunagai" },
+  "plugins": [
+    {
+      "name": "pstack",
+      "source": "./",
+      "description": "pstack adapted to this Claude Code setup: jj version control, explicit subagent models, local tool equivalents.",
+      "license": "MIT"
+    }
+  ]
+}
