@@ -20,6 +20,8 @@ claude plugin install pstack@cc-pstack-local
 claude plugin disable pstack@cursor-plugins
 ```
 
+Claude Code runs a cached copy. After editing this repo, bump `version` in `.claude-plugin/plugin.json` and run `claude plugin update pstack@cc-pstack-local`, then start a new session.
+
 ## Upstream sync
 
 The `upstream` bookmark holds the untouched upstream tree. Local changes sit on top as `main`.
