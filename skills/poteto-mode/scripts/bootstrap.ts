@@ -32,8 +32,9 @@ export function ensureDependenciesInstalled(): void {
     return;
   }
 
+  // Bare `bun` so the pmg PATH shim screens the install.
   const result = Bun.spawnSync(
-    [process.execPath, "install", "--frozen-lockfile"],
+    ["bun", "install", "--frozen-lockfile"],
     { cwd: scriptsDirectory }
   );
   if (result.exitCode !== 0) {

@@ -1166,6 +1166,38 @@ function branchSha({
 }
 
 function currentBranch(repo: string): string {
+  // Colocated jj repos keep git HEAD detached, so read the bookmark from jj:
+  // on @ after `jj edit`, else on @- under the empty working-copy change.
+  for (const revision of ["@", "@-"]) {
+    let names: string[];
+    try {
+      names = runTool({
+        command: "jj",
+        args: [
+          "log",
+          "--ignore-working-copy",
+          "--no-graph",
+          "-r",
+          revision,
+          "-T",
+          'local_bookmarks.map(|b| b.name()).join("\\n")',
+        ],
+        repo,
+      })
+        .split("\n")
+        .filter(Boolean);
+    } catch {
+      break; // Not a jj repo (or no jj): fall back to git.
+    }
+    if (names.length > 1) {
+      throw new UserError(
+        `jj revision ${revision} has several bookmarks: ${names.join(", ")}`
+      );
+    }
+    if (names[0] !== undefined) {
+      return names[0];
+    }
+  }
   return runGit({ args: ["symbolic-ref", "--short", "HEAD"], repo });
 }
 

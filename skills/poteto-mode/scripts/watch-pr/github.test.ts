@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   ChecksUnavailable,
+  GhGitHubReader,
   WatcherQueryError,
   buildReviewThreads,
   mapRollupNode,
@@ -432,5 +436,43 @@ describe("context and stack discovery", () => {
       },
     ]);
     expect(ordered.map((item) => Number(item.number))).toEqual([41, 42, 43]);
+  });
+});
+
+describe("GhGitHubReader in a jj workspace", () => {
+  it("resolves origin and the PR from jj when git has no repo or branch", async () => {
+    const bin = await mkdtemp(join(tmpdir(), "watch-pr-jj-"));
+    const fakes: Record<string, string> = {
+      git: 'echo "fatal: not a git repository" >&2; exit 128',
+      jj: `case "$*" in
+  "git remote list --ignore-working-copy") echo "origin git@github.com:jj-owner/jj-repo.git" ;;
+  *"-r @-"*) echo feature ;;
+  *"-r @ "*) ;;
+  *) echo "unexpected jj $*" >&2; exit 2 ;;
+esac`,
+      gh: `[ "$*" = "pr view feature --repo jj-owner/jj-repo --json number,url" ] || { echo "unexpected gh $*" >&2; exit 2; }
+echo '{"number":7,"url":"https://github.com/jj-owner/jj-repo/pull/7"}'`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      await writeFile(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
+      await chmod(join(bin, name), 0o755);
+    }
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ""}`;
+    try {
+      const reader = new GhGitHubReader();
+      expect(await reader.originRepo()).toEqual({
+        owner: "jj-owner",
+        repo: "jj-repo",
+      });
+      expect(await reader.currentPr(null)).toEqual({
+        owner: "jj-owner",
+        repo: "jj-repo",
+        number: parsePrNumber(7),
+      });
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(bin, { recursive: true, force: true });
+    }
   });
 });

@@ -455,14 +455,51 @@ function graphqlArgs(
   ];
 }
 
+async function currentBookmark(): Promise<string | null> {
+  for (const revision of ["@", "@-"]) {
+    const result = await run([
+      "jj",
+      "log",
+      "--ignore-working-copy",
+      "--no-graph",
+      "-r",
+      revision,
+      "-T",
+      'local_bookmarks.map(|b| b.name()).join("\\n")',
+    ]).catch(() => null);
+    if (result?.code !== 0) return null;
+    const name = result.stdout.split("\n").find(Boolean);
+    if (name !== undefined) return name;
+  }
+  return null;
+}
+
 export class GhGitHubReader implements T.GitHubReader {
   async originRepo(): Promise<T.Repository | null> {
     const result = await run(["git", "remote", "get-url", "origin"]);
-    return result.code === 0 ? parseRemote(result.stdout) : null;
+    if (result.code === 0) return parseRemote(result.stdout);
+    // A jj workspace has no .git; ask jj for the origin URL instead.
+    const jj = await run([
+      "jj",
+      "git",
+      "remote",
+      "list",
+      "--ignore-working-copy",
+    ]).catch(() => null);
+    const url = jj?.code === 0
+      ? jj.stdout.split("\n").find((line) => line.startsWith("origin "))
+      : undefined;
+    return url === undefined ? null : parseRemote(url.slice(7));
   }
   async currentPr(pr: T.PrNumber | null): Promise<T.PrContext> {
     const argv: [string, ...string[]] = ["gh", "pr", "view"];
-    if (pr !== null) argv.push(String(pr));
+    // gh cannot infer a branch from a detached HEAD, so name the jj bookmark.
+    const selector = pr === null ? await currentBookmark() : String(pr);
+    if (selector !== null) {
+      argv.push(selector);
+      const origin = await this.originRepo();
+      if (origin !== null) argv.push("--repo", `${origin.owner}/${origin.repo}`);
+    }
     argv.push("--json", "number,url");
     const object = record(await runJson(argv), "current PR");
     const parsed = parsePrUrl(string(object.url, "current PR.url"));

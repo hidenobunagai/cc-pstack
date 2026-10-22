@@ -592,6 +592,34 @@ describe("Store", () => {
     });
   }
 
+  it("reads the current branch from a jj bookmark under detached HEAD", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    for (const args of [
+      ["git", "init", "--colocate"],
+      ["new", "main"],
+      ["new", "stack/open"],
+    ]) {
+      const result = Bun.spawnSync(["jj", ...args], { cwd: stack.repo });
+      if (result.exitCode !== 0) {
+        throw new Error(`jj ${args.join(" ")} failed: ${result.stderr}`);
+      }
+    }
+    expect(() =>
+      git({ repo: stack.repo, args: ["symbolic-ref", "HEAD"] })
+    ).toThrow();
+
+    await withFakeForge({
+      directory,
+      forge: "gh",
+      operation: async () => {
+        expect(
+          (await store.frontier.set({ repo: stack.repo })).lowestUnmerged
+        ).toBe(11);
+      },
+    });
+  });
+
   it("names the missing pull request when a chain branch has none", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
