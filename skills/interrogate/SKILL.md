@@ -15,7 +15,7 @@ Spawn one reviewer per configured model to adversarially review code changes. Th
 Identify what to review from context:
 
 - If the user points at specific files or a diff, use that.
-- If on a feature branch, run `git diff main...HEAD` (or the appropriate base branch) for the full changeset.
+- If on a feature branch, run `jj diff -r 'trunk()..@'` (or the appropriate base, such as `<b>@origin..@`) for the full changeset.
 - If the user's message references recent work, gather the relevant files.
 
 Package the diff or file contents with any surrounding context files the reviewers need to understand the code.

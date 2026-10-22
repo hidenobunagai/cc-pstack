@@ -36,7 +36,7 @@ Survey recent agent conversations within that scope for recurring patterns. Run 
 - Delegation habits (subagents, models, specialized workflows, parallelism)
 - Verification posture (what "done" means, unit tests vs live repro, reviewers)
 - Code and prose discipline (style, principles cited, lint/format tools)
-- Process conventions (worktrees, commits, PRs, review/merge tooling)
+- Process conventions (jj workspaces, commits, PRs, review/merge tooling)
 - Meta preferences (fixing skills mid-task, proposing new ones)
 
 Cross-check across slices before elevating a signal. Patterns seen in 2+ slices are high-confidence. Lone signals are weak and usually get dropped.
@@ -59,7 +59,7 @@ Group the combined signals into sections. Common ones (use only what applies):
 - **Subagents**: default, parallelism, model-to-task, specialized workflows.
 - **Prose / code discipline**: principles, lint tools, style guides.
 - **Review and verify**: repro posture, verification skills, live-testing tools.
-- **Process**: git worktrees, commits, PRs, review/merge tooling.
+- **Process**: jj workspaces, commits, PRs, review/merge tooling.
 - **Skills**: skill-authoring habits, fix-the-skill-first, proposing new skills.
 
 The **poteto-mode** skill shows the shape. Read it for granularity. Don't copy its content. The user's rules are not the same as poteto-mode's.
@@ -82,7 +82,7 @@ Show the draft to the user and take feedback. Expect multiple iterations. Cut ru
 
 ### 6. Land it
 
-Work in a worktree off main. Commit and open a PR. Don't push to main directly.
+Work in a jj workspace off trunk. Commit and open a PR. Don't push to main directly.
 
 ## Guardrails
 

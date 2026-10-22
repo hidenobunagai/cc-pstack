@@ -72,7 +72,7 @@ Every repo on this host is a colocated jj repo, and git HEAD is detached there b
 | split a commit | `jj split <files>` |
 | `git push`, `git push --force-with-lease` | `jj bookmark set <name> -r @-` then `jj git push -b <name>`. After a rebase, move every bookmark in the stack and push them together (`jj git push -b <a> -b <b>`). Ask the user before moving a bookmark someone else pushed to. |
 | `gh pr create` | Push the bookmark first, then `gh pr create --head <name> --base <parent-or-trunk>`. gh cannot infer the branch from a detached HEAD. |
-| `git diff <base>...HEAD`, `git diff main...HEAD` | `jj diff --from <base> --to @`, base as a revset such as `trunk()` or `<b>@origin`. `git diff` against HEAD misses the working-copy change `@`. |
+| `git diff <base>...HEAD`, `git diff main...HEAD` | `jj diff -r '<base>..@'`, base as a revset such as `trunk()` or `<b>@origin`. This matches the merge-base diff; `--from <base>` would also show trunk's newer changes reversed. `git diff` against HEAD misses the working-copy change `@`. |
 | `git diff` (working tree), `git status` | `jj diff`, `jj st` |
 | `git log <base>..HEAD` | `jj log -r '<base>..@'` |
 | `git show origin/<b>:<path>` | `jj file show -r <b>@origin <path>` |
