@@ -7,3 +7,5 @@ disable-model-invocation: true
 # Exhaust the Design Space
 
 It also applies to product design decisions where user experience depends on feel, not logic.
+
+With the ponytail plugin active, default to one prototype unless the user asks for alternatives or the decision depends on how a user-facing interaction feels.
