@@ -5,7 +5,7 @@ A fork of the [pstack](https://github.com/cursor/plugins/tree/main/pstack) Claud
 ## What changes from upstream
 
 - **Version control.** Every repo here is a colocated jj repo. Git write commands and git worktrees map to jj (`jj workspace add`, `jj commit`, `jj rebase`, `jj bookmark set` + `jj git push`, `gh pr create --head`). Subagents never get `isolation: "worktree"`.
-- **Always-on poteto-mode.** A SessionStart hook (`hooks/poteto-always.sh`) injects `skills/poteto-mode/SKILL.md` into every session, the way Cursor pins a custom mode. Say "poteto-mode off" to drop it for a session. `PSTACK_POTETO=off` in the environment skips it, which the headless jobs set.
+- **Always-on poteto-mode.** A SessionStart hook (`hooks/poteto-always.sh`) injects `skills/poteto-mode/SKILL.md` into every session, the way Cursor pins a custom mode. Say "poteto-mode off" to drop it for a session. It stays on in headless runs too, including the scheduled jobs. `PSTACK_POTETO=off` in the environment is kept as an escape hatch that skips it.
 - **Models.** The host sets `CLAUDE_CODE_SUBAGENT_MODEL=haiku`, so an `Agent` call without `model` runs on haiku. The mapping never omits `model`, the two agents pin `model: sonnet`, and non-Claude panel seats map to `sonnet` so panels keep two model families. Per-role choices live in `~/.claude/rules/pstack-models.md`.
 - **Local equivalents.** Cursor-only steps route to tools that exist here: `web-verify` / `run`, `simplify`, `code-review`, `subscribe_pr_activity`, `loop` / `schedule` / `send_later`, `create_session`, and memmini for past decisions.
 - **Host.** bun instead of npm/node, GNU tool syntax on Linux, English for repository text.
