@@ -1,5 +1,9 @@
 # pstack
 
+> **Unofficial personal fork.** This is [pstack](https://github.com/cursor/plugins/tree/main/pstack) 0.15.30 by Lauren Tan (MIT), adapted to one personal Claude Code setup: jj version control, explicit subagent models, and a shared memory server. It is not affiliated with or endorsed by the author or Cursor. [FORK.md](FORK.md) lists the changes from upstream.
+>
+> Provided as-is, with no support. Issues and pull requests may go unanswered. Fork it and make it yours. The text below is the upstream README, kept as written.
+
 i'm [poteto](https://x.com/poteto). i'm not a president or ceo, but i've worked with millions of lines of code at Meta, Netflix, and Cursor. i'm also on the react core team where i help build and maintain react compiler.
 
 there's a growing sense that ai writes too much slop code. i agree. i don't want to ship like a team of twenty slop artists. throughput without quality is not a goal i aspire to. if you want to go fast, go deep first. 
