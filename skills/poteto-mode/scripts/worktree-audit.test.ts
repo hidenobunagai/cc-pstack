@@ -50,7 +50,8 @@ describe("worktree-audit", () => {
   let repoDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-test-"));
+    // realpath: macOS tmpdir is /var -> /private/var, and jj reports the real path.
+    tempDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "audit-test-")));
     homeDir = path.join(tempDir, "home");
     repoDir = path.join(tempDir, "repo");
     fs.mkdirSync(homeDir, { recursive: true });
