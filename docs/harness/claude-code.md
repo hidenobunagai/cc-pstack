@@ -26,6 +26,7 @@ pstack skills use Cursor names. In Claude Code, read this file once per session,
 | `run_in_background: true` | Omit. Subagents run in the background by default and notify you when they finish. |
 | `resume` | Spawn a new agent and paste the earlier result into its brief. |
 | `file_attachments` | List the paths in the brief. |
+| A fan-out phase (swarm workers, arena runners, interrogate reviewers, verification lanes) while ultracode is on | Run that phase as one `Workflow` script: one `agent()` per worker, `model` from its role line, `parallel()` for a single-message spawn. The chat that runs `/poteto-mode` still owns the playbook, briefs, and judgment. Do not wrap the whole playbook in a Workflow, and do not add Workflow verify stages on top of pstack's own panels. With ultracode off, use `Agent` as written. |
 
 ## Models
 
