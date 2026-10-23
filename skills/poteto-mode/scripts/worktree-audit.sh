@@ -61,13 +61,73 @@ elif raw=$(cd "$main_wt" && gh pr list --author "@me" --state all --limit 1000 \
 fi
 [ -s "$prs" ] || echo "[]" > "$prs"
 
-# Transcripts: ~/.claude/projects/<slug>/*.jsonl, slug = path with "/" and "."
-# changed to "-". A chat started in the main repo mentions the workspace path;
-# a chat started in the workspace has its own folder.
+# Chats: Claude Code keeps ~/.claude/projects/<slug>/*.jsonl, slug = path with
+# "/" and "." changed to "-". agy keeps ~/.gemini/antigravity-cli/brain/<id>/
+# .system_generated/logs/transcript.jsonl, and conversation_summaries.db maps
+# each chat to the folder it started in. A chat started in the main repo
+# mentions the workspace path; a chat started in the workspace is found by its
+# folder.
 slugdir() { printf '%s/.claude/projects/%s' "$HOME" "$(printf '%s' "$1" | tr '/.' '--')"; }
 if stat -c %Y / >/dev/null 2>&1; then mtimes() { xargs stat -c '%Y %n' 2>/dev/null; }
 else mtimes() { xargs stat -f '%m %N' 2>/dev/null; }; fi
 now=$(date +%s)
+
+agy_db="${AGY_CONVERSATION_DB:-$HOME/.gemini/antigravity-cli/conversation_summaries.db}"
+agy_brain="$(dirname "$agy_db")/brain"
+agy_chats=$(mktemp)
+if [ -f "$agy_db" ] && command -v python3 >/dev/null 2>&1; then
+	python3 -c '
+import json, os, sqlite3, sys, urllib.parse
+# agy stores "2026-10-23 19:23:20.461873344+00:00"; SQLite parses it on any
+# Python version, unlike datetime.fromisoformat before 3.11.
+conn = sqlite3.connect("file:" + os.path.abspath(sys.argv[1]) + "?mode=ro", uri=True)
+chats = {}
+for uris, ts in conn.execute("SELECT workspace_uris, CAST(strftime(\"%s\", last_modified_time) AS INTEGER) FROM conversation_summaries"):
+    try:
+        uris = json.loads(uris)
+    except ValueError:
+        continue
+    for uri in uris if isinstance(uris, list) else [uris]:
+        if not isinstance(uri, str) or not uri or not ts:
+            continue
+        p = urllib.parse.unquote(urllib.parse.urlparse(uri).path) if uri.startswith("file://") else uri
+        for k in {os.path.normpath(p), os.path.realpath(p)}:
+            chats[k] = max(chats.get(k, 0), ts)
+for path, ts in chats.items():
+    print(f"{path}\t{ts}")
+' "$agy_db" > "$agy_chats" || echo "warn: could not read $agy_db; agy chats started in a workspace are missed" >&2
+elif [ -f "$agy_db" ]; then
+	echo "warn: python3 not found; agy chats started in a workspace are missed" >&2
+fi
+
+# DSH keeps zstd-compressed transcripts under ~/.dsh/sessions/<slug>/<id>/
+# session.v4.jsonl.zstd. Each one names the folder it started in, so a path
+# match covers both cases. bun decompresses them in one pass (macOS has no zstd
+# CLI) and prints "<workspace>\t<mtime>" for every workspace a transcript names.
+dsh_sessions="${DSH_SESSIONS_DIR:-$HOME/.dsh/sessions}"
+dsh_chats=$(mktemp)
+if [ -d "$dsh_sessions" ] && command -v bun >/dev/null 2>&1; then
+	printf '%s\n' "$workspaces" | cut -f2 | grep . | bun -e '
+const fs = require("fs"), path = require("path");
+const wts = fs.readFileSync(0, "utf8").split("\n").filter(Boolean).map((w) => w.replace(/\/$/, ""));
+const files = fs.readdirSync(process.argv[1], { recursive: true })
+  .filter((f) => f.endsWith("session.v4.jsonl.zstd")).map((f) => path.join(process.argv[1], f));
+for (const f of files) {
+  let text;
+  try {
+    text = Bun.zstdDecompressSync(fs.readFileSync(f)).toString();
+  } catch (e) {
+    console.error(`warn: could not decompress ${f}: ${e.message}`);
+    continue;
+  }
+  const mtime = Math.floor(fs.statSync(f).mtimeMs / 1000);
+  for (const wt of wts)
+    if (["/", "\"", "\\", " "].some((t) => text.includes(wt + t))) console.log(`${wt}\t${mtime}`);
+}
+' "$dsh_sessions" > "$dsh_chats" || echo "warn: could not read DSH transcripts in $dsh_sessions" >&2
+elif [ -d "$dsh_sessions" ]; then
+	echo "warn: bun not found; DSH chats are missed" >&2
+fi
 
 echo "# base: $base"
 printf "SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE\n"
@@ -113,16 +173,21 @@ EOF
 		'.[] | select(.head==$b) | "#\(.number)/\(.state)"' "$prs" 2>/dev/null | head -1)
 	[ -z "$pr" ] && pr="-"
 
-	# Most recent chat whose transcript operated in this workspace. Match path
-	# followed by "/" or a quote so glint-482 does not match glint-482-r37.
-	last="-"; last_ts=0
-	f=$( {
-		[ -d "$(slugdir "$main_wt")" ] && find "$(slugdir "$main_wt")" -maxdepth 1 -name '*.jsonl' \
-			-exec grep -lF -e "${wt}/" -e "${wt}\"" {} + 2>/dev/null
-		[ -d "$(slugdir "$wt")" ] && find "$(slugdir "$wt")" -maxdepth 1 -name '*.jsonl' 2>/dev/null
-	} | mtimes | sort -rn | head -1)
-	if [ -n "$f" ]; then last_ts=$(echo "$f" | awk '{print $1}')
-		last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null || date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null); fi
+	# Most recent chat that operated in this workspace, from every source: a
+	# Claude, agy or DSH transcript that mentions the path, a Claude chat started
+	# in it, or an agy chat started in it. Match path followed by "/", a quote,
+	# the backslash of an escaped quote or a space so glint-482 does not match
+	# glint-482-r37.
+	last="-"; last_ts=$( {
+		{ [ -d "$(slugdir "$main_wt")" ] && find "$(slugdir "$main_wt")" -maxdepth 1 -name '*.jsonl'
+		  [ -d "$agy_brain" ] && find "$agy_brain" -path '*/.system_generated/logs/transcript.jsonl'
+		} 2>/dev/null | xargs grep -lF -e "${wt}/" -e "${wt}\"" -e "${wt}\\" -e "${wt} " 2>/dev/null | mtimes
+		[ -d "$(slugdir "$wt")" ] && find "$(slugdir "$wt")" -maxdepth 1 -name '*.jsonl' 2>/dev/null | mtimes
+		real_wt=$(cd "$wt" 2>/dev/null && pwd -P)
+		awk -F'\t' -v p="${wt%/}" -v r="$real_wt" '$1==p || $1==r {print $2}' "$agy_chats" "$dsh_chats"
+	} | awk '{print $1}' | sort -rn | head -1)
+	last_ts=${last_ts:-0}
+	[ "$last_ts" -gt 0 ] && last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null || date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null)
 	recent=$([ "$last_ts" -gt 0 ] 2>/dev/null && [ $(( (now - last_ts) / 86400 )) -le 4 ] && echo yes || echo no)
 
 	case "$dirty" in wip:*|unknown) bucket=hold-wip ;; *)
@@ -137,4 +202,4 @@ EOF
 		"$size" "$age" "$merged" "$dirty" "$remote" "$pr" "$last" "$bucket" "$name:$wt"
 done | sort -t$'\t' -k1,1 -rh
 
-rm -f "$prs"
+rm -f "$prs" "$agy_chats" "$dsh_chats"
