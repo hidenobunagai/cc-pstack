@@ -29,5 +29,6 @@ The `upstream` bookmark holds the untouched upstream tree. Local changes sit on 
 ```bash
 scripts/sync-upstream.sh --check   # list upstream changes since the last import
 scripts/sync-upstream.sh           # import them onto `upstream`
-jj rebase -s 'roots(::main ~ ::upstream)' -d upstream
+jj rebase --ignore-immutable -s 'roots(::main ~ ::upstream)' -d upstream   # main is pushed, so it is immutable
+jj git push -b upstream -b main
 ```

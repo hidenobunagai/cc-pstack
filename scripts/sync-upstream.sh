@@ -63,7 +63,8 @@ jj -R "$repo_root" bookmark set upstream -r "$ws_name@-" --quiet
 cat <<'EOF2'
 
 Moved the upstream bookmark. Rebase the local adaptations onto it:
-  jj rebase -s 'roots(::main ~ ::upstream)' -d upstream
+  jj rebase --ignore-immutable -s 'roots(::main ~ ::upstream)' -d upstream
+Then push both: jj git push -b upstream -b main
 Then resolve conflicts, re-check docs/harness/claude-code.md against the new upstream rows,
 and bump the version in .claude-plugin/plugin.json.
 EOF2
