@@ -475,4 +475,165 @@ echo '{"number":7,"url":"https://github.com/jj-owner/jj-repo/pull/7"}'`,
       await rm(bin, { recursive: true, force: true });
     }
   });
+
+  it("resolves an ancestor feature bookmark when @ and @- have no bookmark", async () => {
+    const bin = await mkdtemp(join(tmpdir(), "watch-pr-jj-"));
+    const fakes: Record<string, string> = {
+      git: 'echo "fatal: not a git repository" >&2; exit 128',
+      jj: `case "$*" in
+  "git remote list --ignore-working-copy") echo "origin git@github.com:jj-owner/jj-repo.git" ;;
+  *"-r @ "*) ;;
+  *"-r @-"*) ;;
+  *"heads(::@ & (bookmarks() ~ ::trunk()))"*) echo ancestor-feature ;;
+  *) echo "unexpected jj $*" >&2; exit 2 ;;
+esac`,
+      gh: `[ "$*" = "pr view ancestor-feature --repo jj-owner/jj-repo --json number,url" ] || { echo "unexpected gh $*" >&2; exit 2; }
+echo '{"number":12,"url":"https://github.com/jj-owner/jj-repo/pull/12"}'`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      await writeFile(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
+      await chmod(join(bin, name), 0o755);
+    }
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ""}`;
+    try {
+      const reader = new GhGitHubReader();
+      expect(await reader.currentPr(null)).toEqual({
+        owner: "jj-owner",
+        repo: "jj-repo",
+        number: parsePrNumber(12),
+      });
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to heads(::@ & bookmarks()) when no non-trunk bookmark exists in ancestors", async () => {
+    const bin = await mkdtemp(join(tmpdir(), "watch-pr-jj-"));
+    const fakes: Record<string, string> = {
+      git: 'echo "fatal: not a git repository" >&2; exit 128',
+      jj: `case "$*" in
+  "git remote list --ignore-working-copy") echo "origin git@github.com:jj-owner/jj-repo.git" ;;
+  *"-r @ "*) ;;
+  *"-r @-"*) ;;
+  *"heads(::@ & (bookmarks() ~ ::trunk()))"*) ;;
+  *"heads(::@ & bookmarks())"*) echo fallback-bookmark ;;
+  *) echo "unexpected jj $*" >&2; exit 2 ;;
+esac`,
+      gh: `[ "$*" = "pr view fallback-bookmark --repo jj-owner/jj-repo --json number,url" ] || { echo "unexpected gh $*" >&2; exit 2; }
+echo '{"number":15,"url":"https://github.com/jj-owner/jj-repo/pull/15"}'`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      await writeFile(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
+      await chmod(join(bin, name), 0o755);
+    }
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ""}`;
+    try {
+      const reader = new GhGitHubReader();
+      expect(await reader.currentPr(null)).toEqual({
+        owner: "jj-owner",
+        repo: "jj-repo",
+        number: parsePrNumber(15),
+      });
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("throws WatcherQueryError with helpful guidance when no bookmark exists in jj workspace", async () => {
+    const bin = await mkdtemp(join(tmpdir(), "watch-pr-jj-"));
+    const fakes: Record<string, string> = {
+      git: 'echo "fatal: not a git repository" >&2; exit 128',
+      jj: `case "$*" in
+  "root --ignore-working-copy") echo "/fake/root" ;;
+  "git remote list --ignore-working-copy") echo "origin git@github.com:jj-owner/jj-repo.git" ;;
+  *"-r @ "*) ;;
+  *"-r @-"*) ;;
+  *"heads(::@ & (bookmarks() ~ ::trunk()))"*) ;;
+  *"heads(::@ & bookmarks())"*) ;;
+  *) echo "unexpected jj $*" >&2; exit 2 ;;
+esac`,
+      gh: `echo "gh should not be called" >&2; exit 1`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      await writeFile(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
+      await chmod(join(bin, name), 0o755);
+    }
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ""}`;
+    try {
+      const reader = new GhGitHubReader();
+      let caught: unknown = null;
+      try {
+        await reader.currentPr(null);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(WatcherQueryError);
+      const queryError = caught as WatcherQueryError;
+      expect(queryError.message).toContain("jj bookmark set <name> -r @");
+      expect(queryError.message).toContain("--pr <number>");
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("includes --repo in gh pr view when remote info exists", async () => {
+    const bin = await mkdtemp(join(tmpdir(), "watch-pr-jj-"));
+    const fakes: Record<string, string> = {
+      git: `[ "$*" = "remote get-url origin" ] || { echo "unexpected git $*" >&2; exit 2; }
+echo "git@github.com:remote-owner/remote-repo.git"`,
+      gh: `[ "$*" = "pr view 99 --repo remote-owner/remote-repo --json number,url" ] || { echo "unexpected gh $*" >&2; exit 2; }
+echo '{"number":99,"url":"https://github.com/remote-owner/remote-repo/pull/99"}'`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      await writeFile(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
+      await chmod(join(bin, name), 0o755);
+    }
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ""}`;
+    try {
+      const reader = new GhGitHubReader();
+      expect(await reader.currentPr(parsePrNumber(99))).toEqual({
+        owner: "remote-owner",
+        repo: "remote-repo",
+        number: parsePrNumber(99),
+      });
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("includes --repo in gh pr view when pr is null in a git-only repository", async () => {
+    const bin = await mkdtemp(join(tmpdir(), "watch-pr-jj-"));
+    const fakes: Record<string, string> = {
+      git: `[ "$*" = "remote get-url origin" ] || { echo "unexpected git $*" >&2; exit 2; }
+echo "git@github.com:remote-owner/remote-repo.git"`,
+      jj: `exit 1`,
+      gh: `[ "$*" = "pr view --repo remote-owner/remote-repo --json number,url" ] || { echo "unexpected gh $*" >&2; exit 2; }
+echo '{"number":42,"url":"https://github.com/remote-owner/remote-repo/pull/42"}'`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      await writeFile(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
+      await chmod(join(bin, name), 0o755);
+    }
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ""}`;
+    try {
+      const reader = new GhGitHubReader();
+      expect(await reader.currentPr(null)).toEqual({
+        owner: "remote-owner",
+        repo: "remote-repo",
+        number: parsePrNumber(42),
+      });
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(bin, { recursive: true, force: true });
+    }
+  });
 });

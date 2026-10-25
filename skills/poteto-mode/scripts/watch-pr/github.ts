@@ -467,11 +467,40 @@ async function currentBookmark(): Promise<string | null> {
       "-T",
       'local_bookmarks.map(|b| b.name()).join("\\n")',
     ]).catch(() => null);
-    if (result?.code !== 0) return null;
-    const name = result.stdout.split("\n").find(Boolean);
-    if (name !== undefined) return name;
+    if (result?.code === 0) {
+      const name = result.stdout.split("\n").find(Boolean);
+      if (name !== undefined) return name;
+    } else if (revision === "@") {
+      return null;
+    }
+  }
+  for (const revset of [
+    "heads(::@ & (bookmarks() ~ ::trunk()))",
+    "heads(::@ & bookmarks())",
+  ]) {
+    const result = await run([
+      "jj",
+      "log",
+      "--ignore-working-copy",
+      "--no-graph",
+      "-r",
+      revset,
+      "-T",
+      'local_bookmarks.map(|b| b.name()).join("\\n")',
+    ]).catch(() => null);
+    if (result?.code === 0) {
+      const name = result.stdout.split("\n").find(Boolean);
+      if (name !== undefined) return name;
+    }
   }
   return null;
+}
+
+async function isJjWorkspace(): Promise<boolean> {
+  const result = await run(["jj", "root", "--ignore-working-copy"]).catch(
+    () => null
+  );
+  return result?.code === 0;
 }
 
 export class GhGitHubReader implements T.GitHubReader {
@@ -494,12 +523,24 @@ export class GhGitHubReader implements T.GitHubReader {
   async currentPr(pr: T.PrNumber | null): Promise<T.PrContext> {
     const argv: [string, ...string[]] = ["gh", "pr", "view"];
     // gh cannot infer a branch from a detached HEAD, so name the jj bookmark.
-    const selector = pr === null ? await currentBookmark() : String(pr);
-    if (selector !== null) {
-      argv.push(selector);
-      const origin = await this.originRepo();
-      if (origin !== null) argv.push("--repo", `${origin.owner}/${origin.repo}`);
+    if (pr === null) {
+      const bookmark = await currentBookmark();
+      if (bookmark !== null) {
+        argv.push(bookmark);
+      } else if (await isJjWorkspace()) {
+        throw new WatcherQueryError({
+          kind: "command-exit",
+          retryable: true,
+          code: 1,
+          detail:
+            "no bookmark found in jj repository; set a bookmark with `jj bookmark set <name> -r @` or specify `--pr <number>`",
+        });
+      }
+    } else {
+      argv.push(String(pr));
     }
+    const origin = await this.originRepo();
+    if (origin !== null) argv.push("--repo", `${origin.owner}/${origin.repo}`);
     argv.push("--json", "number,url");
     const object = record(await runJson(argv), "current PR");
     const parsed = parsePrUrl(string(object.url, "current PR.url"));
